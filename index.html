@@ -1,0 +1,758 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Ultra V3 – The Most Advanced Trading Engine by Jupiter Exchange</title>
+  <meta name="description" content="Ultra V3 by Jupiter Exchange — price, execution, and protection perfected on Solana: Iris Router, ShadowLane, Predictive Execution, MEV defense, and gasless trading." />
+  <meta name="theme-color" content="#041c17" />
+  <!-- Open Graph -->
+  <meta property="og:title" content="Ultra V3 — Jupiter Exchange" />
+  <meta property="og:description" content="Ultra V3 redefines what precision means in DeFi. Best Price. Best Execution. Best Protection." />
+  <meta property="og:type" content="website" />
+  <meta property="og:image" content="https://dummyimage.com/1200x630/041c17/49ffa1&text=Ultra+V3" />
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Tailwind via CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            display: ['Space Grotesk', 'Inter', 'system-ui', 'sans-serif'],
+            sans: ['Inter', 'system-ui', 'sans-serif']
+          },
+          colors: {
+            jbgTop: '#020d0b',
+            jbgBottom: '#041c17',
+            jMint: '#49ffa1',
+            jMint2: '#00e59b',
+            jMint3: '#06c8a8',
+            jBlue: '#00baff',
+          },
+          boxShadow: {
+            glow: '0 0 0 1px rgba(73,255,161,0.12), 0 0 40px rgba(73,255,161,0.18)',
+            glowBlue: '0 0 0 1px rgba(0,186,255,0.16), 0 0 40px rgba(0,186,255,0.22)',
+          },
+          keyframes: {
+            float: { '0%,100%': { transform:'translateY(0)' }, '50%': { transform:'translateY(-8px)' } },
+            glowpulse: { '0%,100%': { filter:'drop-shadow(0 0 0 rgba(73,255,161,0))' }, '50%': { filter:'drop-shadow(0 0 10px rgba(73,255,161,.35))' } },
+            spinSlow: { 'to': { transform:'rotate(360deg)' } },
+            shimmer: { '0%': { backgroundPosition:'0% 50%' }, '100%': { backgroundPosition:'200% 50%' } }
+          },
+          animation: {
+            float: 'float 6s ease-in-out infinite',
+            glowpulse: 'glowpulse 3.6s ease-in-out infinite',
+            spinSlow: 'spinSlow 40s linear infinite',
+            shimmer: 'shimmer 3s linear infinite',
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Base gradient background + subtle noise overlay */
+    body {
+      background: linear-gradient(180deg, #020d0b 0%, #041c17 100%);
+      color: #d7fbe7;
+      position: relative;
+      overscroll-behavior-y: none;
+    }
+    body::after {
+      content: "";
+      position: fixed; inset: -50px;
+      background-image: radial-gradient(rgba(255,255,255,.03) 1px, transparent 1px);
+      background-size: 3px 3px;
+      opacity: .25; pointer-events: none; z-index: -1;
+    }
+
+    /* Floating particles */
+    .particles { position: absolute; inset: 0; overflow: hidden; pointer-events:none; }
+    .particles span { position:absolute; width:2px; height:2px; background:rgba(73,255,161,0.6); border-radius:9999px; filter:blur(.5px); animation: rise 16s linear infinite; }
+    @keyframes rise { to { transform: translateY(-120vh) translateX(var(--dx)); opacity: 0; } }
+
+    /* Neon button hover trail */
+    .btn-neon { position: relative; isolation: isolate; will-change: transform; }
+    .btn-neon::after {
+      content: ""; position: absolute; inset: -1px; border-radius: inherit;
+      background: radial-gradient(120px 30px at var(--mx,50%) 120%, rgba(0,186,255,.16), transparent 60%);
+      transition: background .15s ease; z-index: -1; filter: blur(8px);
+    }
+
+    /* Glass panels */
+    .glass {
+      background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+      border: 1px solid rgba(255,255,255,0.08);
+      backdrop-filter: blur(12px);
+    }
+
+    /* Animated grid */
+    .gridfx svg { opacity: .18; }
+    .gridfx line { stroke: #00e59b; stroke-opacity:.18; }
+
+    /* Luminous borders */
+    .lumo { box-shadow: 0 0 0 1px rgba(73,255,161,.15), inset 0 0 30px rgba(0,186,255,.06); }
+
+    /* Section reveal */
+    .reveal { opacity: 0; transform: translateY(14px); transition: opacity .7s ease, transform .7s ease; will-change: opacity, transform; }
+    .reveal.on { opacity: 1; transform: translateY(0); }
+
+    /* Premium gradient border utility for cards/tiles */
+    .g-border {
+      position: relative;
+      border-radius: 1.25rem;
+      overflow: hidden;
+    }
+    .g-border::before {
+      content: "";
+      position: absolute; inset: 0;
+      padding: 1px; border-radius: inherit;
+      background: linear-gradient(135deg, rgba(73,255,161,.55), rgba(0,186,255,.45));
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask-composite: xor; mask-composite: exclude;
+      pointer-events: none;
+    }
+
+    /* Inner micro-grid inside cards */
+    .inner-grid {
+      position: absolute; inset: 0; opacity:.12; pointer-events:none;
+      background-image:
+        linear-gradient(to right, rgba(0,229,155,.35) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(0,186,255,.25) 1px, transparent 1px);
+      background-size: 22px 22px, 22px 22px;
+      mix-blend-mode: screen;
+    }
+
+    /* Tile tilt */
+    .tilt {
+      transform-style: preserve-3d;
+      transform: perspective(900px) rotateX(var(--rx,0deg)) rotateY(var(--ry,0deg)) translateZ(0);
+      transition: transform .15s ease, box-shadow .2s ease, border-color .2s ease;
+      will-change: transform;
+    }
+
+    /* Shimmer sweep */
+    .sweep::after {
+      content: "";
+      position: absolute; inset: -1px;
+      background: linear-gradient(120deg, transparent 40%, rgba(255,255,255,.12) 50%, transparent 60%);
+      background-size: 200% 100%;
+      transform: translateX(-100%);
+      transition: transform .9s ease;
+      pointer-events: none;
+    }
+    .sweep:hover::after { transform: translateX(100%); }
+  </style>
+</head>
+<body class="font-sans antialiased selection:bg-jMint/20 selection:text-white">
+
+  <!-- Fixed ornaments -->
+  <div class="fixed inset-0 -z-10 gridfx">
+    <svg class="absolute inset-0 w-full h-full animate-spinSlow" viewBox="0 0 1200 800" preserveAspectRatio="none" aria-hidden="true">
+      <defs>
+        <linearGradient id="gl" x1="0" x2="1" y1="0" y2="1">
+          <stop stop-color="#06c8a8" stop-opacity="0.3" offset="0%"/>
+          <stop stop-color="#00baff" stop-opacity="0.2" offset="100%"/>
+        </linearGradient>
+      </defs>
+      <g stroke="url(#gl)">
+        <!-- Vertical lines (0..1200 step 60) -->
+        <g>
+          <line x1="0" y1="0" x2="0" y2="800"></line><line x1="60" y1="0" x2="60" y2="800"></line>
+          <line x1="120" y1="0" x2="120" y2="800"></line><line x1="180" y1="0" x2="180" y2="800"></line>
+          <line x1="240" y1="0" x2="240" y2="800"></line><line x1="300" y1="0" x2="300" y2="800"></line>
+          <line x1="360" y1="0" x2="360" y2="800"></line><line x1="420" y1="0" x2="420" y2="800"></line>
+          <line x1="480" y1="0" x2="480" y2="800"></line><line x1="540" y1="0" x2="540" y2="800"></line>
+          <line x1="600" y1="0" x2="600" y2="800"></line><line x1="660" y1="0" x2="660" y2="800"></line>
+          <line x1="720" y1="0" x2="720" y2="800"></line><line x1="780" y1="0" x2="780" y2="800"></line>
+          <line x1="840" y1="0" x2="840" y2="800"></line><line x1="900" y1="0" x2="900" y2="800"></line>
+          <line x1="960" y1="0" x2="960" y2="800"></line><line x1="1020" y1="0" x2="1020" y2="800"></line>
+          <line x1="1080" y1="0" x2="1080" y2="800"></line><line x1="1140" y1="0" x2="1140" y2="800"></line>
+          <line x1="1200" y1="0" x2="1200" y2="800"></line>
+        </g>
+        <!-- Horizontal lines (0..800 step 60) -->
+        <g>
+          <line x1="0" y1="0" x2="1200" y2="0"></line><line x1="0" y1="60" x2="1200" y2="60"></line>
+          <line x1="0" y1="120" x2="1200" y2="120"></line><line x1="0" y1="180" x2="1200" y2="180"></line>
+          <line x1="0" y1="240" x2="1200" y2="240"></line><line x1="0" y1="300" x2="1200" y2="300"></line>
+          <line x1="0" y1="360" x2="1200" y2="360"></line><line x1="0" y1="420" x2="1200" y2="420"></line>
+          <line x1="0" y1="480" x2="1200" y2="480"></line><line x1="0" y1="540" x2="1200" y2="540"></line>
+          <line x1="0" y1="600" x2="1200" y2="600"></line><line x1="0" y1="660" x2="1200" y2="660"></line>
+          <line x1="0" y1="720" x2="1200" y2="720"></line><line x1="0" y1="780" x2="1200" y2="780"></line>
+          <line x1="0" y1="800" x2="1200" y2="800"></line>
+        </g>
+      </g>
+    </svg>
+  </div>
+
+  <!-- Floating particles -->
+  <div class="particles -z-10"></div>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const p = document.querySelector('.particles');
+      for (let i=0;i<24;i++){
+        const s = document.createElement('span');
+        const left = Math.random()*100;
+        const delay = Math.random()*-16;
+        const dx = (Math.random()*40 - 20) + 'vw';
+        s.style.left = left+'vw';
+        s.style.bottom = '-10vh';
+        s.style.animationDelay = delay+'s';
+        s.style.setProperty('--dx', dx);
+        p.appendChild(s);
+      }
+    });
+  </script>
+
+  <!-- NAV -->
+  <header class="sticky top-0 z-40 backdrop-blur-lg bg-black/10">
+    <div class="mx-auto max-w-7xl px-4 py-3 flex items-center justify-between">
+      <a href="#top" class="flex items-center gap-2 group">
+        <div class="relative w-8 h-8">
+          <span class="absolute inset-0 rounded-full bg-gradient-to-br from-jMint to-jBlue animate-glowpulse"></span>
+          <span class="absolute inset-0 rounded-full border border-white/10"></span>
+        </div>
+        <span class="font-display tracking-wide text-white/90 group-hover:text-white transition">Ultra V3</span>
+      </a>
+      <nav class="hidden md:flex items-center gap-6 text-sm text-white/70">
+        <a href="#pillars" class="hover:text-white">Pillars</a>
+        <a href="#innovations" class="hover:text-white">Innovations</a>
+        <a href="#results" class="hover:text-white">Results</a>
+        <a href="#integration" class="hover:text-white">Integration</a>
+        <a href="#future" class="hover:text-white">Future</a>
+        <a href="#cta" class="px-3 py-1.5 rounded-lg border border-jMint/40 text-jMint hover:bg-jMint/10 transition">Uplink Challenge</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- HERO -->
+  <section id="top" class="relative min-h-[92vh] w-full overflow-hidden flex items-center">
+    <!-- Jupiter orb -->
+    <div class="absolute -right-24 md:right-0 -top-24 md:-top-12 w-[520px] md:w-[680px] aspect-square blur-[1px] opacity-80">
+      <svg viewBox="0 0 600 600" class="w-full h-full animate-spinSlow" aria-hidden="true">
+        <defs>
+          <radialGradient id="orb" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#49ffa1" stop-opacity="0.9"/>
+            <stop offset="40%" stop-color="#06c8a8" stop-opacity="0.65"/>
+            <stop offset="80%" stop-color="#00baff" stop-opacity="0.35"/>
+            <stop offset="100%" stop-color="#041c17" stop-opacity="0.0"/>
+          </radialGradient>
+        </defs>
+        <circle cx="300" cy="300" r="260" fill="url(#orb)" />
+        <g fill="none" stroke="#00e59b" stroke-opacity=".35">
+          <ellipse cx="300" cy="240" rx="240" ry="48"></ellipse>
+          <ellipse cx="300" cy="300" rx="250" ry="60"></ellipse>
+          <ellipse cx="300" cy="360" rx="220" ry="42"></ellipse>
+        </g>
+      </svg>
+    </div>
+
+    <div class="mx-auto max-w-7xl px-6 md:px-8 grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
+      <div class="reveal">
+        <p class="uppercase tracking-[0.3em] text-xs text-white/60 mb-4">Jupiter Exchange</p>
+        <h1 class="font-display text-4xl md:text-6xl font-semibold leading-[1.05] tracking-wide">
+          <span class="text-white">Prepare to explore</span>
+          <span class="block text-transparent bg-clip-text bg-gradient-to-r from-jMint via-jMint3 to-jBlue animate-shimmer bg-[length:200%_100%]">Ultra V3</span>
+        </h1>
+        <p class="mt-5 text-white/80 text-lg md:text-xl max-w-xl">The most advanced trading engine ever created by Jupiter Exchange.</p>
+        <div class="mt-8 flex flex-wrap items-center gap-4">
+          <a href="#pillars" class="btn-neon inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-white/5 border border-white/10 text-white shadow-glow hover:shadow-glowBlue transition">
+            <span>Discover Ultra V3</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 17L17 7M17 7H9M17 7v8" stroke="#49ffa1" stroke-width="1.6" stroke-linecap="round"/></svg>
+          </a>
+          <a href="https://x.com/JupiterExchange" target="_blank" rel="noopener" class="btn-neon inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-jMint/10 border border-jMint/40 text-jMint shadow-glow hover:bg-jMint/20 transition">
+            <span>Join the Uplink Challenge</span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M7 17L17 7M17 7H9M17 7v8" stroke="#49ffa1" stroke-width="1.6" stroke-linecap="round"/></svg>
+          </a>
+        </div>
+        <p class="mt-4 text-sm text-white/60">Launched <strong class="text-white/80">October 17, 2025</strong> — Now live on Web, Mobile, Desktop, API & Pro Tools.</p>
+      </div>
+
+      <div class="reveal md:justify-self-end lumo rounded-3xl p-6 glass max-w-md md:max-w-lg">
+        <div class="relative aspect-video rounded-2xl overflow-hidden border border-white/10">
+          <div class="absolute inset-0 bg-gradient-to-br from-jMint/20 via-jBlue/10 to-transparent"></div>
+          <svg viewBox="0 0 600 360" class="w-full h-full">
+            <defs>
+              <radialGradient id="core" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stop-color="#49ffa1" stop-opacity="0.9"/>
+                <stop offset="45%" stop-color="#00baff" stop-opacity="0.6"/>
+                <stop offset="100%" stop-color="#041c17" stop-opacity="0"/>
+              </radialGradient>
+            </defs>
+            <circle cx="300" cy="180" r="110" fill="url(#core)"></circle>
+            <g stroke="#00baff" stroke-width="1.4" fill="none" style="filter: drop-shadow(0 0 8px rgba(0,186,255,.5)) drop-shadow(0 0 12px rgba(73,255,161,.4));">
+              <path d="M40 240 C120 180, 200 280, 280 220 S 440 160, 560 200" opacity="0.7"/>
+              <path d="M40 280 C140 200, 220 300, 300 240 S 460 180, 560 220" stroke="#49ffa1" opacity="0.6"/>
+            </g>
+          </svg>
+        </div>
+        <p class="mt-4 text-white/70 text-sm">Powered by <span class="text-jMint">Iris</span>, <span class="text-jMint">ShadowLane</span>, and <span class="text-jMint">Predictive Execution</span>. Experience the future of Solana trading — today.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- PILLARS -->
+  <section id="pillars" class="py-20 md:py-28">
+    <div class="mx-auto max-w-7xl px-6 md:px-8">
+      <p class="reveal text-white/50 uppercase tracking-wide mb-2">Three pillars. One mission: Perfection.</p>
+      <h2 class="reveal font-display text-3xl md:text-5xl tracking-wide mb-10">The Three Pillars of <span class="text-jMint">Ultra V3</span></h2>
+      <div class="grid md:grid-cols-3 gap-6">
+        <!-- Card 1 -->
+        <article class="reveal g-border sweep tilt glass rounded-3xl p-6 border border-white/10 hover:border-jMint/40 hover:shadow-glow transition">
+          <div class="inner-grid"></div>
+          <div class="flex items-center gap-3 mb-4">
+            <span class="w-11 h-11 rounded-xl bg-jMint/15 border border-jMint/30 flex items-center justify-center">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 18V6m5 12V9m5 9V12m5 6V4" stroke="#49ffa1" stroke-width="1.6" stroke-linecap="round"/></svg>
+            </span>
+            <h3 class="font-display text-xl text-white">Best Price — Meta-Aggregation & 
+              <span class="relative group cursor-help text-jMint">Iris Router
+                <span class="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block w-56 text-[11px] leading-snug bg-black/70 text-white/80 p-2 rounded-lg border border-jMint/30 backdrop-blur-sm">Jupiter’s meta-aggregator computing optimal split with 0.01% precision using Golden-section & Brent’s method.</span>
+              </span>
+            </h3>
+          </div>
+          <ul class="text-white/75 leading-relaxed space-y-2">
+            <li>Iris replaces Metis with <strong class="text-white">0.01% split precision</strong> and advanced algorithms (Golden-section, Brent’s method).</li>
+            <li>Integrates data from <strong>JupiterZ</strong>, <strong>DFlow</strong>, <strong>Hashflow</strong> & <strong>OKX</strong> for <strong class="text-white">100×</strong> better routing.</li>
+            <li>JupiterZ RFQ → <strong class="text-white">$100M</strong> daily volume with zero slippage.</li>
+          </ul>
+        </article>
+        <!-- Card 2 -->
+        <article class="reveal g-border sweep tilt glass rounded-3xl p-6 border border-white/10 hover:border-jMint/40 hover:shadow-glow transition">
+          <div class="inner-grid"></div>
+          <div class="flex items-center gap-3 mb-4">
+            <span class="w-11 h-11 rounded-xl bg-jBlue/15 border border-jBlue/30 flex items-center justify-center">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 14l4-4 4-1 1 4-4 4-4-3z" stroke="#00baff" stroke-width="1.6" stroke-linecap="round"/></svg>
+            </span>
+            <h3 class="font-display text-xl text-white">Best Execution — ShadowLane & Predictive Execution</h3>
+          </div>
+          <ul class="text-white/75 leading-relaxed space-y-2">
+            <li>Internal landing engine reducing latency to <strong class="text-white">0–1 block (50–400 ms)</strong>.</li>
+            <li><strong class="text-white">Predictive Execution + RTSE</strong> = <span class="text-jMint">+0.6 bps</span> slippage vs <span class="text-red-300">–14 bps</span> elsewhere.</li>
+            <li>Private infrastructure (<em>no order-flow sales</em>).</li>
+          </ul>
+        </article>
+        <!-- Card 3 -->
+        <article class="reveal g-border sweep tilt glass rounded-3xl p-6 border border-white/10 hover:border-jMint/40 hover:shadow-glow transition">
+          <div class="inner-grid"></div>
+          <div class="flex items-center gap-3 mb-4">
+            <span class="w-11 h-11 rounded-xl bg-jMint/15 border border-jMint/30 flex items-center justify-center">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 4l7 3v5c0 4-3 7-7 8-4-1-7-4-7-8V7l7-3z" stroke="#49ffa1" stroke-width="1.6" stroke-linecap="round"/></svg>
+            </span>
+            <h3 class="font-display text-xl text-white">Best Protection — MEV Defense & RTSE Shield</h3>
+          </div>
+          <ul class="text-white/75 leading-relaxed space-y-2">
+            <li><strong class="text-white">34×</strong> better MEV protection, dynamic slippage estimation for volatile tokens.</li>
+            <li>Real-time shielding that adapts to liquidity shocks.</li>
+          </ul>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ADDITIONAL INNOVATIONS (Visually upgraded) -->
+  <section id="innovations" class="py-20">
+    <div class="mx-auto max-w-7xl px-6 md:px-8">
+      <p class="reveal text-white/50 uppercase tracking-wide mb-2">Breaking limits others accept.</p>
+      <h2 class="reveal font-display text-3xl md:text-4xl tracking-wide mb-8">Additional Innovations</h2>
+
+      <div class="grid md:grid-cols-3 gap-6">
+        <!-- Card A -->
+        <div class="reveal g-border sweep tilt relative rounded-3xl p-6 glass border border-white/10 hover:border-jMint/50 hover:shadow-glow transition">
+          <div class="inner-grid"></div>
+          <div class="flex items-center gap-3 mb-3">
+            <div class="w-10 h-10 rounded-xl bg-jMint/15 border border-jMint/30 flex items-center justify-center">
+              <!-- signal icon -->
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M4 18V10M10 18V6M16 18v-8M22 18v-4" stroke="#49ffa1" stroke-width="1.6" stroke-linecap="round"/></svg>
+            </div>
+            <h3 class="font-display text-white text-lg">Ultra Signaling</h3>
+          </div>
+          <p class="text-white/70">Up to <strong class="text-white">50%</strong> tighter quotes for non-toxic flows with intelligent flow classification.</p>
+          <div class="mt-5 h-[2px] w-1/2 bg-gradient-to-r from-jMint to-jBlue opacity-60"></div>
+        </div>
+
+        <!-- Card B -->
+        <div class="reveal g-border sweep tilt relative rounded-3xl p-6 glass border border-white/10 hover:border-jMint/50 hover:shadow-glow transition">
+          <div class="inner-grid"></div>
+          <div class="flex items-center gap-3 mb-3">
+            <div class="w-10 h-10 rounded-xl bg-jBlue/15 border border-jBlue/30 flex items-center justify-center">
+              <!-- gasless icon -->
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M6 12h12M12 6v12" stroke="#00baff" stroke-width="1.6" stroke-linecap="round"/></svg>
+            </div>
+            <h3 class="font-display text-white text-lg">Gasless Trading</h3>
+          </div>
+          <p class="text-white/70">Trade without SOL; supports Token-2022 & memecoin pairs (≥ $10) via sponsored fees.</p>
+          <div class="mt-5 h-[2px] w-1/2 bg-gradient-to-r from-jBlue to-jMint opacity-60"></div>
+        </div>
+
+        <!-- Card C -->
+        <div class="reveal g-border sweep tilt relative rounded-3xl p-6 glass border border-white/10 hover:border-jMint/50 hover:shadow-glow transition">
+          <div class="inner-grid"></div>
+          <div class="flex items-center gap-3 mb-3">
+            <div class="w-10 h-10 rounded-xl bg-jMint/15 border border-jMint/30 flex items-center justify-center">
+              <!-- revive icon -->
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 5v4m0 6v4M5 12h4m6 0h4" stroke="#49ffa1" stroke-width="1.6" stroke-linecap="round"/></svg>
+            </div>
+            <h3 class="font-display text-white text-lg">Just-In-Time Market Revival</h3>
+          </div>
+          <p class="text-white/70">Route any Solana token, even inactive ones, with on-demand liquidity activation.</p>
+          <div class="mt-5 h-[2px] w-1/2 bg-gradient-to-r from-jMint to-jBlue opacity-60"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- RESULTS & IMPACT -->
+  <section id="results" class="py-20">
+    <div class="mx-auto max-w-7xl px-6 md:px-8">
+      <p class="reveal text-white/50 uppercase tracking-wide mb-2">Precision you can measure.</p>
+      <h2 class="reveal font-display text-3xl md:text-4xl tracking-wide mb-2">Results & Impact</h2>
+      <p class="reveal text-white/70 mb-8">Ultra V3 redefines what precision means in DeFi.</p>
+
+      <div class="reveal grid md:grid-cols-2 gap-8 items-center">
+        <!-- Chart -->
+        <div class="g-border glass rounded-3xl p-6 border border-white/10">
+          <svg viewBox="0 0 640 320" class="w-full h-full">
+            <defs>
+              <linearGradient id="gradMint" x1="0" x2="1"><stop offset="0%" stop-color="#49ffa1"/><stop offset="100%" stop-color="#06c8a8"/></linearGradient>
+              <linearGradient id="gradBlue" x1="0" x2="1"><stop offset="0%" stop-color="#00baff"/><stop offset="100%" stop-color="#49ffa1"/></linearGradient>
+              <filter id="softGlow"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+            </defs>
+            <g fill="none" stroke-width="2.5" filter="url(#softGlow)">
+              <path d="M20 220 C 120 210, 220 180, 320 200 S 520 230, 620 210" stroke="url(#gradMint)" />
+              <path d="M20 140 C 120 150, 220 180, 320 160 S 520 110, 620 130" stroke="url(#gradBlue)" opacity="0.5"/>
+            </g>
+            <g font-family="Inter" font-size="12" fill="#c6f7e5">
+              <text x="28" y="36">Slippage</text>
+              <text x="420" y="52" fill="#a6fff0">+0.6 bps (Ultra)</text>
+              <text x="420" y="84" fill="#9adfff">–14 bps (Elsewhere)</text>
+            </g>
+          </svg>
+        </div>
+        <!-- Stats -->
+        <div class="grid sm:grid-cols-2 gap-6">
+          <div class="glass rounded-2xl p-5 border border-white/10">
+            <p class="text-4xl font-display text-jMint">8–10×</p>
+            <p class="text-white/70">Cheaper fees</p>
+          </div>
+          <div class="glass rounded-2xl p-5 border border-white/10">
+            <p class="text-4xl font-display text-jMint" data-count="100" data-suffix="×">0</p>
+            <p class="text-white/70">Routing improvement</p>
+          </div>
+          <div class="glass rounded-2xl p-5 border border-white/10">
+            <p class="text-4xl font-display text-jMint" data-count="3" data-suffix="×">0</p>
+            <p class="text-white/70">More trades landed</p>
+          </div>
+          <div class="glass rounded-2xl p-5 border border-white/10">
+            <p class="text-4xl font-display text-jMint">0–1 block</p>
+            <p class="text-white/70">Latency window</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SEAMLESS INTEGRATION (Visually upgraded) -->
+  <section id="integration" class="py-20">
+    <div class="mx-auto max-w-7xl px-6 md:px-8">
+      <p class="reveal text-white/50 uppercase tracking-wide mb-2">Wherever you trade, Ultra follows.</p>
+      <h2 class="reveal font-display text-3xl md:text-4xl tracking-wide mb-6">Seamless Integration</h2>
+      <p class="reveal text-white/60 mb-8">Web · Mobile · Desktop · Pro Tools · API</p>
+
+      <div class="grid md:grid-cols-5 gap-5">
+        <!-- Tile template enhanced -->
+        <div class="reveal g-border sweep tilt group relative rounded-2xl p-5 glass border border-white/10 hover:border-jMint/50 hover:shadow-glow transition">
+          <div class="inner-grid"></div>
+          <div class="h-28 rounded-xl relative overflow-hidden flex items-center justify-center bg-gradient-to-br from-white/5 to-white/0 border border-white/10">
+            <!-- shimmer -->
+            <div class="absolute inset-0 opacity-0 group-hover:opacity-100 transition">
+              <div class="absolute right-2 bottom-2 px-2 py-1 text-[10px] rounded bg-black/40 border border-white/10">Swap</div>
+            </div>
+            <!-- icon -->
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" class="opacity-80">
+              <rect x="3" y="4" width="18" height="14" rx="2" stroke="#49ffa1" stroke-width="1.5"/>
+              <path d="M3 8h18" stroke="#00baff" stroke-width="1.2"/>
+            </svg>
+            <div class="absolute inset-0 pointer-events-none"></div>
+          </div>
+          <div class="mt-3 text-center text-white/85">Web</div>
+        </div>
+
+        <div class="reveal g-border sweep tilt group relative rounded-2xl p-5 glass border border-white/10 hover:border-jMint/50 hover:shadow-glow transition">
+          <div class="inner-grid"></div>
+          <div class="h-28 rounded-xl relative overflow-hidden flex items-center justify-center bg-gradient-to-br from-white/5 to-white/0 border border-white/10">
+            <div class="absolute inset-0 opacity-0 group-hover:opacity-100 transition">
+              <div class="absolute right-2 bottom-2 px-2 py-1 text-[10px] rounded bg-black/40 border border-white/10">Perps</div>
+            </div>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" class="opacity-80">
+              <rect x="7" y="2" width="10" height="20" rx="2" stroke="#49ffa1" stroke-width="1.5"/>
+              <circle cx="12" cy="18" r="1" fill="#00baff"/>
+            </svg>
+          </div>
+          <div class="mt-3 text-center text-white/85">Mobile</div>
+        </div>
+
+        <div class="reveal g-border sweep tilt group relative rounded-2xl p-5 glass border border-white/10 hover:border-jMint/50 hover:shadow-glow transition">
+          <div class="inner-grid"></div>
+          <div class="h-28 rounded-xl relative overflow-hidden flex items-center justify-center bg-gradient-to-br from-white/5 to-white/0 border border-white/10">
+            <div class="absolute inset-0 opacity-0 group-hover:opacity-100 transition">
+              <div class="absolute right-2 bottom-2 px-2 py-1 text-[10px] rounded bg-black/40 border border-white/10">Lend</div>
+            </div>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" class="opacity-80">
+              <rect x="4" y="5" width="16" height="12" rx="2" stroke="#49ffa1" stroke-width="1.5"/>
+              <path d="M8 9h8M8 13h5" stroke="#00baff" stroke-width="1.2"/>
+            </svg>
+          </div>
+          <div class="mt-3 text-center text-white/85">Desktop</div>
+        </div>
+
+        <div class="reveal g-border sweep tilt group relative rounded-2xl p-5 glass border border-white/10 hover:border-jMint/50 hover:shadow-glow transition">
+          <div class="inner-grid"></div>
+          <div class="h-28 rounded-xl relative overflow-hidden flex items-center justify-center bg-gradient-to-br from-white/5 to-white/0 border border-white/10">
+            <div class="absolute inset-0 opacity-0 group-hover:opacity-100 transition">
+              <div class="absolute right-2 bottom-2 px-2 py-1 text-[10px] rounded bg-black/40 border border-white/10">Analytics</div>
+            </div>
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" class="opacity-80">
+              <path d="M4 16V8M10 16v-6M16 16v-4M22 20H2" stroke="#49ffa1" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="mt-3 text-center text-white/85">Pro Tools</div>
+        </div>
+
+        <div class="reveal g-border sweep tilt group relative rounded-2xl p-5 glass border border-white/10 hover:border-jMint/50 hover:shadow-glow transition">
+          <div class="inner-grid"></div>
+          <div class="h-28 rounded-xl relative overflow-hidden flex items-center justify-center bg-gradient-to-br from-white/5 to-white/0 border border-white/10">
+            <div class="absolute inset-0 opacity-0 group-hover:opacity-100 transition">
+              <div class="absolute right-2 bottom-2 px-2 py-1 text-[10px] rounded bg-black/40 border border-white/10">REST</div>
+            </div>
+            <svg width="30" height="30" viewBox="0 0 24 24" fill="none" class="opacity-80">
+              <path d="M4 6h16M6 10h12M8 14h8M10 18h4" stroke="#00baff" stroke-width="1.4" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="mt-3 text-center text-white/85">API</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CONTEXT & FUTURE -->
+  <section id="future" class="py-20 relative overflow-hidden">
+    <div class="absolute inset-0 -z-10 opacity-30">
+      <svg viewBox="0 0 1440 600" class="w-full h-full" aria-hidden="true">
+        <defs>
+          <linearGradient id="ctxg" x1="0" x2="1" y1="0" y2="1">
+            <stop offset="0%" stop-color="#00e59b" stop-opacity="0.3"/>
+            <stop offset="100%" stop-color="#00baff" stop-opacity="0.2"/>
+          </linearGradient>
+        </defs>
+        <g stroke="url(#ctxg)" stroke-width=".6">
+          <path d="M0 560 L1440 0"/><path d="M-120 600 L1440 -120"/><path d="M-240 600 L1440 -240"/>
+          <path d="M0 0 L1440 560"/><path d="M-120 -60 L1440 620"/><path d="M-240 -120 L1440 680"/>
+        </g>
+      </svg>
+    </div>
+
+    <div class="mx-auto max-w-7xl px-6 md:px-8">
+      <div class="reveal grid lg:grid-cols-2 gap-10 items-start">
+        <div class="glass rounded-3xl p-8 border border-white/10">
+          <p class="text-white/50 uppercase tracking-wide mb-2 reveal">Built on Metis. Forged into Ultra.</p>
+          <h2 class="font-display text-3xl md:text-4xl mb-4">Context & Future</h2>
+          <p class="text-white/75 leading-relaxed mb-4">From <strong>Metis</strong> to the <strong>Ultra API</strong>, Jupiter evolved its core routing and execution stack to prioritize precision, latency, and protection — without compromise.</p>
+          <p class="text-white/70 leading-relaxed">Jupiter’s leadership continues to grow with deep liquidity, advanced RFQ, and integrated venues — setting the benchmark for Solana trading.</p>
+          <div class="mt-6 grid sm:grid-cols-3 gap-4 text-center">
+            <div class="glass rounded-2xl p-5 border border-white/10">
+              <p class="text-sm text-white/60">30-day volume</p>
+              <p class="text-2xl font-display text-jMint">$23.6B</p>
+            </div>
+            <div class="glass rounded-2xl p-5 border border-white/10">
+              <p class="text-sm text-white/60">Venues</p>
+              <p class="text-2xl font-display text-jMint">Aggregated</p>
+            </div>
+            <div class="glass rounded-2xl p-5 border border-white/10">
+              <p class="text-sm text-white/60">Latency</p>
+              <p class="text-2xl font-display text-jMint">0-1 block</p>
+            </div>
+          </div>
+        </div>
+        <!-- Timeline -->
+        <div class="reveal glass rounded-3xl p-8 border border-white/10">
+          <h3 class="font-display text-xl text-white mb-4">Timeline</h3>
+          <ol class="relative border-l border-white/10 pl-6 space-y-6">
+            <li>
+              <div class="absolute -left-[6.5px] top-1 w-3 h-3 rounded-full bg-jBlue shadow-glowBlue"></div>
+              <p class="text-white/60 text-sm">Oct 16</p>
+              <p class="text-white">Ambassador Program</p>
+            </li>
+            <li>
+              <div class="absolute -left-[6.5px] top-1 w-3 h-3 rounded-full bg-jMint shadow-glow"></div>
+              <p class="text-white/60 text-sm">Oct 17</p>
+              <p class="text-white">Ultra V3 Launch</p>
+            </li>
+            <li>
+              <div class="absolute -left-[6.5px] top-1 w-3 h-3 rounded-full bg-white/60"></div>
+              <p class="text-white/60 text-sm">Oct 24</p>
+              <p class="text-white">Uplink Challenge Deadline</p>
+            </li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- WHY IT CHANGES EVERYTHING (quote only, as requested) -->
+  <section id="why" class="py-24">
+    <div class="mx-auto max-w-5xl px-6 md:px-8 text-center">
+      <blockquote class="reveal text-2xl md:text-4xl font-display tracking-wide text-jMint animate-glowpulse">“Innovation, execution, and protection — without compromise.”</blockquote>
+    </div>
+  </section>
+
+  <!-- CTA -->
+  <section id="cta" class="py-24 relative">
+    <div class="mx-auto max-w-4xl px-6 md:px-8 text-center">
+      <p class="reveal text-white/50 uppercase tracking-wide mb-2">Your journey starts here.</p>
+      <div class="relative inline-block">
+        <div class="absolute -inset-6 rounded-full bg-gradient-to-r from-jMint/20 via-jBlue/20 to-transparent blur-3xl"></div>
+        <h2 class="relative font-display text-3xl md:text-4xl tracking-wide text-white">Join the Uplink Challenge – <span class="text-jMint">10,000 USDC</span> Rewards</h2>
+      </div>
+      <p class="reveal mt-3 text-white/70">Create, share, and win. Showcase Ultra V3 across your channels.</p>
+      <div class="reveal mt-7 flex flex-wrap items-center justify-center gap-4">
+        <a href="https://x.com/jup_uplink/status/1980288870840480025" target="_blank" rel="noopener" class="btn-neon inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white/5 border border-white/10 text-white hover:bg-white/10 shadow-glowBlue transition">Create your content now</a>
+        <a href="https://x.com/JupiterExchange" target="_blank" rel="noopener" class="btn-neon inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-white/5 border border-white/10 text-white hover:bg-white/10 shadow-glowBlue transition">Learn more on X</a>
+      </div>
+      <div class="mt-10 relative mx-auto w-24 h-24">
+        <div class="absolute inset-0 rounded-full border border-white/10"></div>
+        <div class="absolute inset-0 rounded-full animate-spinSlow" style="animation-duration:18s">
+          <div class="absolute -top-1/2 left-1/2 -translate-x-1/2 w-4 h-4 rounded-full bg-gradient-to-br from-jMint to-jBlue shadow-glow"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="border-t border-white/10 py-10">
+    <div class="mx-auto max-w-7xl px-6 md:px-8 flex flex-col md:flex-row items-center justify-between gap-6">
+      <p class="text-white/60 text-sm">Powered by Jupiter Exchange | Solana Ecosystem | © 2025 All rights reserved.</p>
+      <nav class="flex flex-wrap items-center gap-5 text-sm">
+        <a class="text-white/70 hover:text-jMint transition" href="#">Docs</a>
+        <a class="text-white/70 hover:text-jMint transition" href="#">API</a>
+        <a class="text-white/70 hover:text-jMint transition" href="#">Blog</a>
+        <a class="text-white/70 hover:text-jMint transition" href="#">Discord</a>
+        <a class="text-white/70 hover:text-jMint transition" href="https://x.com/JupiterExchange" target="_blank" rel="noopener">X</a>
+        <a class="text-white/70 hover:text-jMint transition" href="#">Terms</a>
+        <a class="text-white/70 hover:text-jMint transition" href="#">Privacy</a>
+      </nav>
+    </div>
+  </footer>
+
+  <!-- Cursor Glow & Scroll Progress -->
+  <div id="cursorGlow" class="fixed w-32 h-32 rounded-full bg-jMint/20 blur-3xl pointer-events-none z-50 mix-blend-screen hidden md:block"></div>
+  <div id="scrollProgress" class="fixed left-4 top-1/2 -translate-y-1/2 h-48 w-[2px] bg-jMint/20 rounded-full overflow-hidden hidden md:block">
+    <div id="progressFill" class="w-full bg-jMint/80 h-0"></div>
+  </div>
+
+  <!-- Interactions -->
+  <script>
+    // Enhanced reveal stagger
+    const revealEls = Array.from(document.querySelectorAll('.reveal'));
+    const revealObserver = new IntersectionObserver((entries)=>{
+      entries.forEach((entry)=>{
+        if(entry.isIntersecting){
+          const idx = revealEls.indexOf(entry.target);
+          entry.target.style.transitionDelay = (Math.min(idx, 6) * 60) + 'ms';
+          entry.target.classList.add('on');
+        }
+      });
+    }, { rootMargin: '0px 0px -10% 0px', threshold: 0.1 });
+    revealEls.forEach(el=>revealObserver.observe(el));
+
+    // Magnetic CTAs + neon trail position
+    document.querySelectorAll('.btn-neon').forEach(btn => {
+      btn.addEventListener('mousemove', e => {
+        const r = btn.getBoundingClientRect();
+        const x = e.clientX - (r.left + r.width/2);
+        const y = e.clientY - (r.top + r.height/2);
+        btn.style.transform = `translate(${x*0.12}px, ${y*0.12}px)`;
+        const mx = ((e.clientX - r.left) / r.width) * 100 + '%';
+        btn.style.setProperty('--mx', mx);
+      });
+      btn.addEventListener('mouseleave', ()=>{ btn.style.transform=''; });
+    });
+
+    // Parallax background grid
+    const grid = document.querySelector('.gridfx');
+    if(grid){
+      document.addEventListener('mousemove', e => {
+        const dx = (e.clientX / window.innerWidth - 0.5) * 8;
+        const dy = (e.clientY / window.innerHeight - 0.5) * 8;
+        grid.style.transform = `translate(${dx}px, ${dy}px)`;
+      }, { passive: true });
+    }
+
+    // Scroll progress
+    const progressFill = document.getElementById('progressFill');
+    const onProgress = () => {
+      const scroll = window.scrollY;
+      const height = document.body.scrollHeight - window.innerHeight;
+      const pct = Math.max(0, Math.min(1, scroll / height));
+      if(progressFill) progressFill.style.height = (pct * 100) + '%';
+    };
+    document.addEventListener('scroll', onProgress, { passive: true });
+    window.addEventListener('load', onProgress);
+
+    // Cursor glow
+    const glow = document.getElementById('cursorGlow');
+    if(glow){
+      document.addEventListener('pointermove', e => {
+        glow.style.left = (e.clientX - 64) + 'px';
+        glow.style.top  = (e.clientY - 64) + 'px';
+      });
+    }
+
+    // Count-up stats
+    const counters = document.querySelectorAll('[data-count]');
+    const counterObs = new IntersectionObserver((entries)=>{
+      entries.forEach(entry=>{
+        if(entry.isIntersecting){
+          const el = entry.target;
+          if(el.dataset.played) return;
+          el.dataset.played = '1';
+          const target = parseFloat(el.dataset.count || '0');
+          const suffix = el.dataset.suffix || '';
+          let v = 0; const dur = 900; const t0 = performance.now();
+          const tick = (t)=>{
+            const p = Math.min(1, (t - t0) / dur);
+            v = target * (0.4 + 0.6*Math.pow(p, 0.8));
+            el.textContent = (Math.round(v)).toString() + suffix;
+            if(p < 1) requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+        }
+      });
+    }, { threshold: 0.5 });
+    counters.forEach(el=>counterObs.observe(el));
+
+    // Gentle 3D tilt for .tilt elements
+    const tilts = document.querySelectorAll('.tilt');
+    tilts.forEach(card => {
+      card.addEventListener('pointermove', (e) => {
+        const r = card.getBoundingClientRect();
+        const px = (e.clientX - r.left) / r.width;
+        const py = (e.clientY - r.top) / r.height;
+        const ry = (px - 0.5) * 8;  // rotateY
+        const rx = -(py - 0.5) * 8; // rotateX
+        card.style.setProperty('--ry', ry + 'deg');
+        card.style.setProperty('--rx', rx + 'deg');
+      });
+      card.addEventListener('pointerleave', () => {
+        card.style.setProperty('--ry', '0deg');
+        card.style.setProperty('--rx', '0deg');
+      });
+    });
+  </script>
+</body>
+</html>
