@@ -1,0 +1,98 @@
+# ============================================================
+#  Configuration du bot de trading Solana small-cap
+#  Toutes les valeurs sont modifiables sans toucher au code.
+# ============================================================
+
+mode: paper            # paper | live   (live = swaps réels via Jupiter)
+
+# ---------------- Boucle principale ----------------
+loop:
+  scan_interval_sec: 60      # fréquence de scan du marché (découverte)
+  manage_interval_sec: 15    # fréquence de gestion des positions ouvertes
+  max_tokens_per_scan: 40    # nb max de tokens analysés en profondeur par cycle
+
+# ---------------- Univers / découverte ----------------
+universe:
+  chain: solana
+  market_cap_min: 500000     # 500k  $
+  market_cap_max: 3000000    # 3M    $
+  # Tokens quote acceptés pour la paire (SOL / USDC)
+  quote_symbols: ["SOL", "USDC"]
+
+# ---------------- Filtres de liquidité ----------------
+liquidity:
+  min_liquidity_usd: 30000        # liquidité minimale du pool
+  min_volume_24h_usd: 50000       # volume minimum sur 24h
+  min_vol_liq_ratio: 0.5          # volume24h / liquidité (activité réelle)
+  max_vol_liq_ratio: 50           # au-delà = pump/wash trading suspect
+  min_txns_24h: 150               # nombre de transactions sur 24h
+  min_age_hours: 6                # âge minimum de la paire (anti-snipe brut)
+  max_age_hours: 2160             # 90 jours max (on cible le "frais")
+
+# ---------------- Filtres anti-rug / honeypot ----------------
+safety:
+  require_mint_revoked: true       # mint authority doit être révoquée
+  require_freeze_revoked: true     # freeze authority doit être révoquée
+  max_top10_holders_pct: 70        # concentration max des 10 plus gros holders
+  min_holders: 100                 # nombre minimum de détenteurs
+  max_buy_tax_pct: 10              # taxe d'achat max tolérée
+  max_sell_tax_pct: 10             # taxe de vente max (détection honeypot)
+  max_price_impact_pct: 8          # impact prix max sur la taille d'entrée
+  blacklist_tokens: []             # adresses de mint à bannir
+  blacklist_creators: []           # wallets créateurs à bannir
+
+# ---------------- Analyse technique ----------------
+analysis:
+  ohlcv_interval: "15m"     # bougies utilisées pour les indicateurs
+  ohlcv_lookback: 200       # nb de bougies récupérées
+  indicators:
+    rsi_period: 14
+    ema_fast: 9
+    ema_slow: 21
+    ema_trend: 50
+    macd_fast: 12
+    macd_slow: 26
+    macd_signal: 9
+    bb_period: 20
+    bb_std: 2.0
+    atr_period: 14
+  # Pondération du score composite (somme libre, normalisée ensuite)
+  weights:
+    trend: 0.25
+    momentum: 0.25
+    volume: 0.20
+    volatility: 0.10
+    liquidity_health: 0.20
+  # Seuil de score (0-100) pour déclencher une entrée
+  entry_score_threshold: 68
+
+# ---------------- Gestion du risque ----------------
+risk:
+  starting_balance_usd: 1000      # capital virtuel (paper)
+  position_size_pct: 5            # % du capital par trade
+  max_position_usd: 150           # plafond absolu par position
+  max_open_positions: 6           # nb max de positions simultanées
+  max_total_exposure_pct: 60      # exposition cumulée max du portefeuille
+  daily_loss_limit_pct: 15        # coupe-circuit : perte journalière max
+  # Sorties automatiques
+  take_profit_pct: 35             # TP principal
+  stop_loss_pct: 12               # SL dur
+  trailing_stop_pct: 10           # trailing activé après TP partiel
+  trailing_activation_pct: 15     # gain à partir duquel le trailing s'arme
+  partial_tp_pct: 50              # % de la position vendue au 1er TP
+  max_hold_hours: 48              # sortie forcée si trop long
+  # Coûts simulés (réalisme du paper trading)
+  slippage_pct: 1.5
+  fee_pct: 0.3                    # frais Jupiter + priorité (approx.)
+
+# ---------------- Persistance & logs ----------------
+storage:
+  db_path: "bot_data.sqlite"
+  log_path: "bot.log"
+  log_level: "INFO"
+
+# ---------------- Live (ignoré en paper) ----------------
+live:
+  priority_fee_lamports: 100000
+  max_slippage_bps: 150           # 1.5%
+  confirm_timeout_sec: 60
