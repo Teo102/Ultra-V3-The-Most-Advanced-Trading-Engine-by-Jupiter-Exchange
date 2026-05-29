@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import time
 
+from .analysis.recommendation import Recommender
 from .analysis.signals import SignalEngine
 from .clients.birdeye import BirdeyeClient
 from .clients.dexscreener import DexScreenerClient
@@ -42,8 +43,11 @@ class TradingEngine:
         self.universe = UniverseFilter(config)
         self.safety = SafetyChecker(config, self.birdeye, self.jupiter)
         self.signals = SignalEngine(config)
+        self.recommender = Recommender(config)
         self.risk = RiskManager(config)
         self.portfolio = Portfolio(config, self.db)
+        log.info("Stratégie '%s' | risque '%s'",
+                 config.active_strategy, config.active_risk_profile)
 
         self.scan_interval = config.get("loop.scan_interval_sec", 60)
         self.manage_interval = config.get("loop.manage_interval_sec", 15)
@@ -87,6 +91,35 @@ class TradingEngine:
         for pair in candidates:
             self._evaluate_candidate(pair)
 
+    def analyze_market(self) -> list[tuple]:
+        """Analyse + note CHAQUE candidat sans trader. Retourne une liste
+        triée (pair, analysis, plan) décroissante par score. Sert au
+        rapport `rank` (tableau de notation des tokens)."""
+        pairs = self.dex.discover()
+        candidates = [p for p in pairs if self.universe.passes(p)[0]]
+        candidates.sort(
+            key=lambda p: (p.volume_24h * (1 + max(p.price_change_h1, 0) / 100)),
+            reverse=True,
+        )
+        candidates = candidates[: self.max_tokens]
+        log.info("Notation de %d token(s) éligible(s)…", len(candidates))
+
+        equity = self.portfolio.equity(self._price_cache)
+        out = []
+        for pair in candidates:
+            candles = self.birdeye.get_ohlcv(
+                pair.base_address,
+                self.cfg.get("analysis.ohlcv_interval", "15m"),
+                self.cfg.get("analysis.ohlcv_lookback", 200),
+            )
+            analysis = self.signals.analyze(pair, candles)
+            plan = self.recommender.evaluate(
+                pair, analysis, equity, self.portfolio.cash, 0
+            )
+            out.append((pair, analysis, plan))
+        out.sort(key=lambda t: t[1].score, reverse=True)
+        return out
+
     def _evaluate_candidate(self, pair: TokenPair) -> None:
         # Analyse technique
         candles = self.birdeye.get_ohlcv(
@@ -95,17 +128,31 @@ class TradingEngine:
             self.cfg.get("analysis.ohlcv_lookback", 200),
         )
         analysis = self.signals.analyze(pair, candles)
-        log.info("%-10s | MC %8.0fk | score %5.1f | %-5s | %s",
+
+        # Recommandation : note + action + plan (calculé pour CHAQUE token)
+        equity = self.portfolio.equity(self._price_cache)
+        positions_value = self.portfolio.positions_value(self._price_cache)
+        plan = self.recommender.evaluate(
+            pair, analysis, equity, self.portfolio.cash, positions_value
+        )
+
+        log.info("%-10s | MC %7.0fk | NOTE %-2s | score %5.1f | conf %4.1f | "
+                 "%-10s | %s",
                  pair.base_symbol, (pair.market_cap or pair.fdv) / 1000,
-                 analysis.score, analysis.signal,
+                 plan.grade, plan.score, plan.confidence, plan.action,
                  ", ".join(analysis.reasons[:2]))
 
-        if analysis.signal != "BUY":
+        if not plan.is_actionable:
+            return
+
+        # Plan de scalping détaillé
+        self._log_plan(pair, plan)
+
+        if plan.size_usd < 1:
+            log.info("  ↳ taille de position trop faible — pas d'entrée")
             return
 
         # Vérifs de risque avant d'engager des appels de sécurité coûteux
-        equity = self.portfolio.equity(self._price_cache)
-        positions_value = self.portfolio.positions_value(self._price_cache)
         can, why = self.risk.can_open(
             equity, self.portfolio.cash,
             len(self.portfolio.positions), positions_value,
@@ -122,14 +169,22 @@ class TradingEngine:
         if report.reasons:
             log.info("  ↳ sécurité OK (notes : %s)", "; ".join(report.reasons))
 
-        # Sizing + achat
-        size = self.risk.position_size_usd(equity, self.portfolio.cash)
-        if size < 1:
-            return
-        reason = f"score={analysis.score} | {report.top10_holders_pct or '?'}%top10"
+        reason = (f"{plan.action} note={plan.grade} score={plan.score} "
+                  f"R/R={plan.risk_reward}")
         self.portfolio.buy(pair.base_address, pair.base_symbol,
-                           pair.price_usd, size, reason)
+                           pair.price_usd, plan.size_usd, reason, plan=plan)
         self._price_cache[pair.base_address] = pair.price_usd
+
+    def _log_plan(self, pair: TokenPair, plan) -> None:
+        tps = " ".join(
+            f"TP{i+1} {t['price']:.6g}(+{t['pct']:.0f}%/{int(t['portion']*100)}%)"
+            for i, t in enumerate(plan.take_profits)
+        )
+        log.info("  ↳ PLAN %s | entrée %.6g | STOP %.6g (-%.1f%%) | %s",
+                 plan.strategy, plan.entry_price, plan.stop_price,
+                 plan.stop_pct, tps)
+        log.info("  ↳ taille %.2f$ | R/R %.2f | détention %s | confiance %.0f%%",
+                 plan.size_usd, plan.risk_reward, plan.est_hold, plan.confidence)
 
     # ------------------------------------------------------------------
     #  Gestion des positions ouvertes
@@ -151,6 +206,12 @@ class TradingEngine:
             reason, fraction = self.risk.evaluate_exit(pos, price)
             if reason:
                 self.portfolio.sell(addr, price, fraction, reason)
+                # Palier de TP partiel atteint : on le retire pour ne pas
+                # le redéclencher, et on persiste le reliquat.
+                if (fraction < 1.0 and addr in self.portfolio.positions
+                        and pos.tp_targets):
+                    pos.tp_targets.pop(0)
+                    self.db.upsert_position(self.portfolio.positions[addr])
 
         # Snapshot d'équité
         eq = self.portfolio.equity(self._price_cache)

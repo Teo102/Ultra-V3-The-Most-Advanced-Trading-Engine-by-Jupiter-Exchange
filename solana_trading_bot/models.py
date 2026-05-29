@@ -68,6 +68,39 @@ class AnalysisResult:
 
 
 @dataclass
+class TradePlan:
+    """Plan d'action concret pour un token (scalping/swing).
+
+    Produit pour CHAQUE token analysé : note, action recommandée et,
+    si l'action est positive, les niveaux d'exécution (entrée, stop,
+    paliers de take-profit) et la taille calculée sur le risque.
+    """
+
+    grade: str                          # A+, A, B, C, D, F
+    action: str                         # STRONG_BUY | BUY | WATCH | AVOID
+    score: float                        # 0-100 (score composite)
+    confidence: float                   # 0-100
+    strategy: str = ""                  # nom du profil actif (ex: scalping)
+    entry_price: float = 0.0
+    stop_price: float = 0.0
+    take_profits: list[dict] = field(default_factory=list)  # [{price,portion,pct}]
+    size_usd: float = 0.0
+    risk_reward: float = 0.0
+    est_hold: str = ""
+    rationale: list[str] = field(default_factory=list)
+
+    @property
+    def stop_pct(self) -> float:
+        if self.entry_price <= 0 or self.stop_price <= 0:
+            return 0.0
+        return (self.entry_price - self.stop_price) / self.entry_price * 100
+
+    @property
+    def is_actionable(self) -> bool:
+        return self.action in ("STRONG_BUY", "BUY")
+
+
+@dataclass
 class Position:
     """Position ouverte (paper ou live)."""
 
@@ -80,6 +113,10 @@ class Position:
     highest_price: float = 0.0         # pour le trailing stop
     partial_taken: bool = False
     fees_paid_usd: float = 0.0
+    # Plan d'exécution attaché (scalping) — niveaux absolus de prix
+    stop_price: float = 0.0
+    tp_targets: list[dict] = field(default_factory=list)  # [{price,portion}]
+    strategy: str = ""
 
     def __post_init__(self) -> None:
         if self.highest_price == 0.0:

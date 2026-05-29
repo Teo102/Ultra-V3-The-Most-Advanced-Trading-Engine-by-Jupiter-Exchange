@@ -15,7 +15,7 @@ import sys
 from .config import Config
 from .engine import TradingEngine
 from .logger import setup_logging, get_logger
-from .reporting import print_report
+from .reporting import print_report, print_rankings
 from .storage.database import Database
 
 log = get_logger("cli")
@@ -28,8 +28,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "command", nargs="?", default="run",
-        choices=["run", "once", "scan", "stats"],
-        help="run=boucle | once=1 cycle | scan=analyse seule | stats=rapport",
+        choices=["run", "once", "scan", "rank", "stats"],
+        help="run=boucle | once=1 cycle | scan=analyse seule | "
+             "rank=tableau de notation | stats=rapport",
     )
     parser.add_argument("-c", "--config", default="config.yaml",
                         help="chemin du fichier de configuration")
@@ -65,6 +66,10 @@ def main(argv: list[str] | None = None) -> int:
         engine.shutdown()
     elif args.command == "scan":
         engine.scan_and_trade()
+        engine.shutdown()
+    elif args.command == "rank":
+        rows = engine.analyze_market()
+        print_rankings(rows)
         engine.shutdown()
 
     return 0

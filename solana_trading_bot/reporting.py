@@ -36,6 +36,49 @@ def compute_stats(db: Database) -> dict:
     return stats
 
 
+_ACTION_STYLE = {
+    "STRONG_BUY": "bold green", "BUY": "green",
+    "WATCH": "yellow", "AVOID": "dim red",
+}
+
+
+def print_rankings(rows: list[tuple]) -> None:
+    """Affiche le tableau de notation des tokens (pair, analysis, plan)."""
+    try:
+        from rich.console import Console
+        from rich.table import Table
+
+        table = Table(title="🏅 Notation des tokens (500k-3M MC)",
+                      show_header=True, header_style="bold cyan")
+        for col, just in (("Token", "left"), ("MC", "right"), ("Note", "center"),
+                          ("Score", "right"), ("Conf", "right"),
+                          ("Action", "center"), ("Entrée", "right"),
+                          ("Stop", "right"), ("R/R", "right"),
+                          ("Taille$", "right"), ("Setup", "left")):
+            table.add_column(col, justify=just)
+
+        for pair, analysis, plan in rows:
+            mc = (pair.market_cap or pair.fdv) / 1000
+            style = _ACTION_STYLE.get(plan.action, "white")
+            entry = f"{plan.entry_price:.6g}" if plan.entry_price else "—"
+            stop = f"{plan.stop_price:.6g}" if plan.stop_price else "—"
+            rr = f"{plan.risk_reward:.2f}" if plan.risk_reward else "—"
+            size = f"{plan.size_usd:.0f}" if plan.size_usd else "—"
+            table.add_row(
+                pair.base_symbol, f"{mc:.0f}k", f"[{style}]{plan.grade}[/]",
+                f"{plan.score:.0f}", f"{plan.confidence:.0f}",
+                f"[{style}]{plan.action}[/]", entry, stop, rr, size,
+                ", ".join(analysis.reasons[:2])[:48],
+            )
+        Console().print(table)
+    except Exception:
+        print("\n=== Notation des tokens ===")
+        for pair, analysis, plan in rows:
+            print(f"  {pair.base_symbol:10s} note={plan.grade:2s} "
+                  f"score={plan.score:5.1f} {plan.action:10s} "
+                  f"R/R={plan.risk_reward}")
+
+
 def print_report(db: Database) -> None:
     stats = compute_stats(db)
     try:

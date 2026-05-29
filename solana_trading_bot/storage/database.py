@@ -34,7 +34,10 @@ class Database:
                 token_address TEXT PRIMARY KEY,
                 symbol TEXT, entry_price REAL, quantity REAL, cost_usd REAL,
                 opened_at REAL, highest_price REAL, partial_taken INTEGER,
-                fees_paid_usd REAL
+                fees_paid_usd REAL,
+                stop_price REAL DEFAULT 0,
+                tp_targets TEXT DEFAULT '[]',
+                strategy TEXT DEFAULT ''
             );
             CREATE TABLE IF NOT EXISTS equity_curve (
                 timestamp REAL PRIMARY KEY, equity_usd REAL,
@@ -45,7 +48,23 @@ class Database:
             );
             """
         )
+        self._migrate()
         self.conn.commit()
+
+    def _migrate(self) -> None:
+        """Ajoute les colonnes manquantes aux bases créées par d'anciennes
+        versions (migration idempotente)."""
+        cols = {row["name"] for row in
+                self.conn.execute("PRAGMA table_info(positions)").fetchall()}
+        for name, ddl in (
+            ("stop_price", "REAL DEFAULT 0"),
+            ("tp_targets", "TEXT DEFAULT '[]'"),
+            ("strategy", "TEXT DEFAULT ''"),
+        ):
+            if name not in cols:
+                self.conn.execute(
+                    f"ALTER TABLE positions ADD COLUMN {name} {ddl}"
+                )
 
     # ---------------- Meta (état persistant) ----------------
     def set_meta(self, key: str, value) -> None:
@@ -84,16 +103,20 @@ class Database:
     def upsert_position(self, p: Position) -> None:
         self.conn.execute(
             "INSERT INTO positions(token_address,symbol,entry_price,quantity,"
-            "cost_usd,opened_at,highest_price,partial_taken,fees_paid_usd) "
-            "VALUES(?,?,?,?,?,?,?,?,?) "
+            "cost_usd,opened_at,highest_price,partial_taken,fees_paid_usd,"
+            "stop_price,tp_targets,strategy) "
+            "VALUES(?,?,?,?,?,?,?,?,?,?,?,?) "
             "ON CONFLICT(token_address) DO UPDATE SET "
             "symbol=excluded.symbol, entry_price=excluded.entry_price, "
             "quantity=excluded.quantity, cost_usd=excluded.cost_usd, "
             "highest_price=excluded.highest_price, "
             "partial_taken=excluded.partial_taken, "
-            "fees_paid_usd=excluded.fees_paid_usd",
+            "fees_paid_usd=excluded.fees_paid_usd, "
+            "stop_price=excluded.stop_price, tp_targets=excluded.tp_targets, "
+            "strategy=excluded.strategy",
             (p.token_address, p.symbol, p.entry_price, p.quantity, p.cost_usd,
-             p.opened_at, p.highest_price, int(p.partial_taken), p.fees_paid_usd),
+             p.opened_at, p.highest_price, int(p.partial_taken), p.fees_paid_usd,
+             p.stop_price, json.dumps(p.tp_targets), p.strategy),
         )
         self.conn.commit()
 
@@ -107,6 +130,7 @@ class Database:
         rows = self.conn.execute("SELECT * FROM positions").fetchall()
         out: dict[str, Position] = {}
         for r in rows:
+            keys = r.keys()
             out[r["token_address"]] = Position(
                 token_address=r["token_address"], symbol=r["symbol"],
                 entry_price=r["entry_price"], quantity=r["quantity"],
@@ -114,6 +138,10 @@ class Database:
                 highest_price=r["highest_price"],
                 partial_taken=bool(r["partial_taken"]),
                 fees_paid_usd=r["fees_paid_usd"],
+                stop_price=r["stop_price"] if "stop_price" in keys else 0.0,
+                tp_targets=json.loads(r["tp_targets"])
+                if "tp_targets" in keys and r["tp_targets"] else [],
+                strategy=r["strategy"] if "strategy" in keys else "",
             )
         return out
 

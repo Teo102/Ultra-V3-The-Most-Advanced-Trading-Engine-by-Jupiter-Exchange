@@ -57,9 +57,23 @@ class Config:
             )
         with path.open("r", encoding="utf-8") as fh:
             data = yaml.safe_load(fh) or {}
+        # Fusionne les profils de stratégie/risque actifs dans la config.
+        from .strategies import apply_profiles
+
+        data = apply_profiles(data)
         cfg = cls(data, Secrets.from_env())
         cfg.validate()
         return cfg
+
+    @property
+    def active_strategy(self) -> str:
+        return (self.get("_active_profile.strategy")
+                or self.get("strategy.active") or "default")
+
+    @property
+    def active_risk_profile(self) -> str:
+        return (self.get("_active_profile.risk_profile")
+                or self.get("strategy.risk_profile") or "default")
 
     def get(self, dotted: str, default: Any = None) -> Any:
         """Accès du type cfg.get('risk.stop_loss_pct')."""

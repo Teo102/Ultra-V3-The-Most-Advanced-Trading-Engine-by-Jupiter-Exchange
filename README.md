@@ -29,9 +29,11 @@ solana_trading_bot/
 │   ├── dexscreener.py   # découverte de paires + données de marché
 │   ├── birdeye.py       # OHLCV + sécurité on-chain + holders
 │   └── jupiter.py       # quotes/route (price impact, anti-honeypot)
+├── strategies.py        # profils stratégie (scalping/swing) + risque
 ├── analysis/
 │   ├── indicators.py    # RSI, EMA, MACD, Bollinger, ATR (pandas/numpy)
-│   └── signals.py       # score composite 0-100 + signal BUY/HOLD/AVOID
+│   ├── signals.py       # score composite 0-100 + signal BUY/HOLD/AVOID
+│   └── recommendation.py# note A+→F + plan d'action (entrée/stop/TP/taille)
 ├── safety/
 │   └── filters.py       # filtre univers (MC+liquidité) + anti-rug/honeypot
 ├── trading/
@@ -82,6 +84,9 @@ python -m solana_trading_bot once
 # Découverte + analyse SANS trader (exploration)
 python -m solana_trading_bot scan
 
+# Tableau de NOTATION des tokens (note A+→F + plan par token)
+python -m solana_trading_bot rank
+
 # Rapport de performance
 python -m solana_trading_bot stats
 ```
@@ -115,8 +120,58 @@ Tout est paramétrable sans toucher au code. Sections principales :
 | `volatility`       | 0.10  | Position dans les bandes de Bollinger, ATR |
 | `liquidity_health` | 0.20  | Ratio volume/liquidité, profondeur du pool |
 
-Entrée déclenchée quand `score ≥ entry_score_threshold` (68 par défaut) **et**
-réussite du filtre anti-rug.
+Entrée déclenchée quand `score ≥ entry_score_threshold` **et** réussite du
+filtre anti-rug.
+
+---
+
+## 🎯 Stratégies, risque & notation
+
+### Profils de stratégie (`strategy.active`)
+
+Le style de trading est sélectionnable dans `config.yaml`. Chaque profil
+écrase les sections `analysis` / `risk` / `loop` :
+
+| Profil      | Timeframe | Stop | Take-profit (paliers)      | Détention |
+|-------------|-----------|------|----------------------------|-----------|
+| `scalping`  | 5 min     | serré (ATR ×1.3, ~5%) | +6% / +12% / +25% | ~4 h max |
+| `swing`     | 1 h       | large (ATR ×2.0, ~15%)| +30% / +60% / +120% | ~4 j max |
+
+### Profils de risque (`strategy.risk_profile`)
+
+Appliqués **par-dessus** la stratégie, ils ajustent l'appétit au risque :
+
+| Profil         | % risqué/trade | Max positions | Exposition max | Seuil entrée |
+|----------------|----------------|---------------|----------------|--------------|
+| `conservative` | 1.0%           | 4             | 40%            | 75           |
+| `moderate`     | 1.5%           | 6             | 60%            | (défaut)     |
+| `aggressive`   | 3.0%           | 10            | 85%            | 62           |
+
+### Note par token (A+ → F)
+
+Chaque token analysé reçoit une **note** synthétique dérivée du score :
+
+| Note | A+   | A    | B    | C    | D    | F    |
+|------|------|------|------|------|------|------|
+| Score| ≥88  | ≥80  | ≥72  | ≥63  | ≥52  | <52  |
+
+### Plan d'action de scalping
+
+Pour tout setup actionnable (`STRONG_BUY` / `BUY`), le bot produit un plan
+concret, affiché par `rank` et journalisé avant chaque entrée :
+
+- **Action** : `STRONG_BUY` · `BUY` · `WATCH` · `AVOID`
+- **Entrée** : prix de marché courant
+- **Stop-loss** : adapté à la volatilité (ATR) ou % du profil
+- **Paliers de take-profit** : niveaux de prix + fraction vendue à chaque palier
+- **Taille de position** : calculée sur le **risque** (`risk_per_trade_pct`),
+  bornée par la taille max, le cash et l'exposition restante
+- **Risque/récompense (R/R)** et **durée de détention estimée**
+- **Confiance** : cohérence entre les composantes du score
+
+Ces niveaux sont **attachés à la position** : la gestion des sorties exécute
+le stop et les paliers de TP au prix planifié, puis arme un trailing stop sur
+le reliquat.
 
 ---
 

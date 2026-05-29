@@ -58,23 +58,53 @@ class RiskManager:
     def evaluate_exit(self, pos: Position, price: float) -> tuple[str | None, float]:
         """Retourne (raison_sortie, fraction_à_vendre) ou (None, 0).
 
-        fraction = 1.0 => sortie totale ; <1 => sortie partielle (TP partiel).
+        Si la position porte un plan (stop_price / tp_targets absolus), on
+        applique le plan ; sinon on retombe sur la logique en pourcentage.
+        fraction = 1.0 => sortie totale ; <1 => sortie partielle.
         """
-        pnl_pct = pos.unrealized_pnl_pct(price)
-
-        # Stop-loss dur
-        if pnl_pct <= -self.stop_loss_pct:
-            return "stop-loss", 1.0
-
-        # Sortie temporelle
+        # Sortie temporelle (commune aux deux modes)
         if pos.hold_hours() >= self.max_hold_hours:
             return "max-hold", 1.0
 
-        # Take-profit partiel (une seule fois)
+        if pos.stop_price or pos.tp_targets:
+            return self._evaluate_plan_exit(pos, price)
+        return self._evaluate_pct_exit(pos, price)
+
+    def _evaluate_plan_exit(self, pos: Position,
+                            price: float) -> tuple[str | None, float]:
+        """Sorties pilotées par les niveaux absolus du plan de scalping."""
+        # Stop-loss au prix planifié
+        if pos.stop_price and price <= pos.stop_price:
+            return "stop-loss (plan)", 1.0
+
+        # Paliers de take-profit (le premier palier atteint est exécuté)
+        if pos.tp_targets:
+            target = pos.tp_targets[0]
+            if price >= target["price"]:
+                portion = float(target.get("portion", 1.0))
+                last = len(pos.tp_targets) == 1
+                reason = "take-profit (plan, final)" if last \
+                    else f"take-profit (palier @{target['price']:.6g})"
+                return reason, 1.0 if last else portion
+
+        # Trailing stop sur le reliquat après un premier TP partiel
+        if pos.partial_taken and pos.highest_price > 0:
+            drop = (pos.highest_price - price) / pos.highest_price * 100
+            if drop >= self.trailing_stop_pct:
+                return "trailing-stop", 1.0
+
+        return None, 0.0
+
+    def _evaluate_pct_exit(self, pos: Position,
+                           price: float) -> tuple[str | None, float]:
+        pnl_pct = pos.unrealized_pnl_pct(price)
+
+        if pnl_pct <= -self.stop_loss_pct:
+            return "stop-loss", 1.0
+
         if not pos.partial_taken and pnl_pct >= self.take_profit_pct:
             return "take-profit-partiel", self.partial_tp_pct / 100
 
-        # Trailing stop (armé après activation)
         if pnl_pct >= self.trailing_activation_pct:
             drop_from_high = (pos.highest_price - price) / pos.highest_price * 100
             if drop_from_high >= self.trailing_stop_pct:

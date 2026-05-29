@@ -71,7 +71,8 @@ class Portfolio:
 
     # ---------------- Exécution ----------------
     def buy(self, token_address: str, symbol: str, price: float,
-            usd_amount: float, reason: str = "") -> Position | None:
+            usd_amount: float, reason: str = "",
+            plan=None) -> Position | None:
         if usd_amount <= 0 or price <= 0 or usd_amount > self.cash:
             log.warning("Achat refusé (%s) : montant=%.2f cash=%.2f",
                         symbol, usd_amount, self.cash)
@@ -94,6 +95,14 @@ class Portfolio:
             entry_price=fill_price, quantity=quantity,
             cost_usd=invested, fees_paid_usd=fees,
         )
+        # Attache les niveaux du plan de scalping (stop + paliers TP).
+        if plan is not None:
+            pos.stop_price = getattr(plan, "stop_price", 0.0) or 0.0
+            pos.tp_targets = [
+                {"price": t["price"], "portion": t["portion"]}
+                for t in getattr(plan, "take_profits", [])
+            ]
+            pos.strategy = getattr(plan, "strategy", "") or ""
         self.positions[token_address] = pos
         self.db.upsert_position(pos)
         self._persist_cash()
