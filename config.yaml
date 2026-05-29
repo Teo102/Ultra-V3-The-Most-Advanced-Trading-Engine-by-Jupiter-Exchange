@@ -103,6 +103,7 @@ loop:
   scan_interval_sec: 60      # fréquence de scan du marché (découverte)
   manage_interval_sec: 15    # fréquence de gestion des positions ouvertes
   max_tokens_per_scan: 40    # nb max de tokens analysés en profondeur par cycle
+  workers: 8                 # threads pour l'analyse parallèle (I/O-bound)
 
 # ---------------- Univers / découverte ----------------
 universe:
@@ -175,8 +176,9 @@ risk:
   partial_tp_pct: 50              # % de la position vendue au 1er TP
   max_hold_hours: 48              # sortie forcée si trop long
   # Coûts simulés (réalisme du paper trading)
-  slippage_pct: 1.5
+  slippage_pct: 1.5               # slippage de base
   fee_pct: 0.3                    # frais Jupiter + priorité (approx.)
+  impact_k: 0.6                   # sensibilité du slippage à taille/liquidité
 
 # ---------------- Persistance & logs ----------------
 storage:

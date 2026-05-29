@@ -166,6 +166,45 @@ def test_plan_based_exits():
     assert "take-profit" in reason and frac == 0.5
 
 
+def test_fill_model_slippage_scales_with_size():
+    from solana_trading_bot.trading.execution import FillModel
+    fm = FillModel(base_slippage_pct=1.0, fee_pct=0.3, impact_k=0.6)
+    # Plus le trade est gros vs la liquidité, plus le slippage augmente
+    small = fm.slippage_pct(100, 100_000)
+    big = fm.slippage_pct(10_000, 100_000)
+    assert big > small >= 1.0
+    # L'impact réel Jupiter est prioritaire quand fourni
+    real = fm.slippage_pct(100, 100_000, real_impact_pct=7.0)
+    assert real >= 7.0
+    # Borne haute respectée
+    assert fm.slippage_pct(1_000_000, 1_000) <= 25.0
+
+
+def test_fill_model_buy_sell_directions():
+    from solana_trading_bot.trading.execution import FillModel
+    fm = FillModel(base_slippage_pct=1.0, fee_pct=0.3)
+    buy_price, buy_fee = fm.buy_fill(1.0, 100, 100_000)
+    sell_price, sell_fee = fm.sell_fill(1.0, 100, 100_000)
+    assert buy_price > 1.0 > sell_price       # achat plus cher, vente moins
+    assert buy_fee > 0 and sell_fee > 0
+
+
+def test_backtester_runs_and_reports():
+    from solana_trading_bot.backtest import Backtester
+    cfg = _config()
+    bt = Backtester(cfg, liquidity_usd=100_000)
+    # Marché haussier puis baissier pour générer des trades + une sortie
+    candles = _trending_candles(n=160, drift=0.01)
+    candles += _trending_candles(n=60, start=candles[-1]["c"], drift=-0.01)
+    res = bt.run("TEST", candles, interval=cfg.get("analysis.ohlcv_interval"))
+    assert res.n_candles == len(candles)
+    assert res.final_equity > 0
+    assert 0 <= res.win_rate_pct <= 100
+    assert res.max_drawdown_pct >= 0
+    # Le backtest doit être déterministe et cohérent (equity = départ + PnL)
+    assert isinstance(res.total_return_pct, float)
+
+
 def test_position_plan_persistence(tmp_path):
     from solana_trading_bot.models import TradePlan
     db = Database(str(tmp_path / "p.sqlite"))

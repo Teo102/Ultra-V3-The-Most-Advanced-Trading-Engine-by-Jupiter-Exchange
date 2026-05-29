@@ -12,11 +12,13 @@ Pipeline par cycle :
 from __future__ import annotations
 
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 from .analysis.recommendation import Recommender
 from .analysis.signals import SignalEngine
 from .clients.birdeye import BirdeyeClient
 from .clients.dexscreener import DexScreenerClient
+from .clients.geckoterminal import GeckoTerminalClient
 from .clients.jupiter import JupiterClient
 from .config import Config
 from .logger import get_logger
@@ -37,6 +39,7 @@ class TradingEngine:
         # Clients
         self.dex = DexScreenerClient()
         self.birdeye = BirdeyeClient(config.secrets.birdeye_api_key)
+        self.gecko = GeckoTerminalClient()
         self.jupiter = JupiterClient()
 
         # Modules
@@ -52,107 +55,122 @@ class TradingEngine:
         self.scan_interval = config.get("loop.scan_interval_sec", 60)
         self.manage_interval = config.get("loop.manage_interval_sec", 15)
         self.max_tokens = config.get("loop.max_tokens_per_scan", 40)
+        self.ohlcv_interval = config.get("analysis.ohlcv_interval", "15m")
+        self.ohlcv_lookback = config.get("analysis.ohlcv_lookback", 200)
+        self.workers = config.get("loop.workers", 8)
 
         self._last_scan = 0.0
         self._price_cache: dict[str, float] = {}
 
     # ------------------------------------------------------------------
-    #  Découverte + analyse + entrée
+    #  OHLCV : Birdeye (par token) -> repli GeckoTerminal (par pool)
     # ------------------------------------------------------------------
-    def scan_and_trade(self) -> None:
-        log.info("─" * 60)
-        log.info("SCAN du marché…")
+    def _get_ohlcv(self, pair: TokenPair):
+        candles = None
+        if self.birdeye.enabled:
+            candles = self.birdeye.get_ohlcv(
+                pair.base_address, self.ohlcv_interval, self.ohlcv_lookback
+            )
+        if not candles and pair.pair_address:
+            candles = self.gecko.get_ohlcv(
+                pair.pair_address, self.ohlcv_interval, self.ohlcv_lookback
+            )
+        return candles
+
+    def _analyze_pair(self, pair: TokenPair, equity: float, cash: float,
+                      positions_value: float) -> tuple:
+        """Unité d'analyse READ-ONLY (sûre à paralléliser)."""
+        candles = self._get_ohlcv(pair)
+        analysis = self.signals.analyze(pair, candles)
+        plan = self.recommender.evaluate(pair, analysis, equity, cash,
+                                         positions_value)
+        return pair, analysis, plan
+
+    def _analyze_many(self, candidates: list[TokenPair], equity: float,
+                      cash: float, positions_value: float) -> list[tuple]:
+        """Analyse en parallèle (I/O-bound) puis tri par score décroissant."""
+        if not candidates:
+            return []
+        workers = max(1, min(self.workers, len(candidates)))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            results = list(pool.map(
+                lambda p: self._analyze_pair(p, equity, cash, positions_value),
+                candidates,
+            ))
+        results.sort(key=lambda t: t[1].score, reverse=True)
+        return results
+
+    # ------------------------------------------------------------------
+    #  Découverte + filtre univers
+    # ------------------------------------------------------------------
+    def _eligible_candidates(self, skip_open: bool = True) -> list[TokenPair]:
         pairs = self.dex.discover()
-
-        # Filtre 1 : univers
-        candidates: list[TokenPair] = []
+        candidates = []
         for pair in pairs:
-            ok, _ = self.universe.passes(pair)
-            if ok and pair.base_address not in self.portfolio.positions:
+            if skip_open and pair.base_address in self.portfolio.positions:
+                continue
+            if self.universe.passes(pair)[0]:
                 candidates.append(pair)
-
-        # Priorise les plus dynamiques (volume + momentum h1)
         candidates.sort(
             key=lambda p: (p.volume_24h * (1 + max(p.price_change_h1, 0) / 100)),
             reverse=True,
         )
-        candidates = candidates[: self.max_tokens]
+        return candidates[: self.max_tokens]
+
+    # ------------------------------------------------------------------
+    #  Scan + trading
+    # ------------------------------------------------------------------
+    def scan_and_trade(self) -> None:
+        t0 = time.time()
+        log.info("─" * 60)
+        log.info("SCAN du marché…")
+        candidates = self._eligible_candidates()
         log.info("Filtre univers : %d candidat(s) éligible(s) (500k-3M MC)",
                  len(candidates))
 
         # Coupe-circuit journalier
         equity = self.portfolio.equity(self._price_cache)
+        positions_value = self.portfolio.positions_value(self._price_cache)
         self.portfolio.roll_day_if_needed(self._price_cache)
         if self.risk.daily_circuit_breaker(self.portfolio.day_start_equity,
                                             equity):
             log.warning("Achats suspendus aujourd'hui (coupe-circuit).")
             return
 
-        for pair in candidates:
-            self._evaluate_candidate(pair)
+        # Analyse parallèle (lecture seule), puis entrées séquentielles (sûres)
+        analyzed = self._analyze_many(candidates, equity, self.portfolio.cash,
+                                      positions_value)
+        log.info("Analyse de %d token(s) en %.1fs", len(analyzed),
+                 time.time() - t0)
+        for pair, analysis, plan in analyzed:
+            self._log_grade(pair, plan, analysis)
+            if plan.is_actionable:
+                self._execute_entry(pair, analysis, plan)
 
     def analyze_market(self) -> list[tuple]:
-        """Analyse + note CHAQUE candidat sans trader. Retourne une liste
-        triée (pair, analysis, plan) décroissante par score. Sert au
-        rapport `rank` (tableau de notation des tokens)."""
-        pairs = self.dex.discover()
-        candidates = [p for p in pairs if self.universe.passes(p)[0]]
-        candidates.sort(
-            key=lambda p: (p.volume_24h * (1 + max(p.price_change_h1, 0) / 100)),
-            reverse=True,
-        )
-        candidates = candidates[: self.max_tokens]
+        """Analyse + note CHAQUE candidat sans trader (commande `rank`)."""
+        candidates = self._eligible_candidates(skip_open=False)
         log.info("Notation de %d token(s) éligible(s)…", len(candidates))
-
         equity = self.portfolio.equity(self._price_cache)
-        out = []
-        for pair in candidates:
-            candles = self.birdeye.get_ohlcv(
-                pair.base_address,
-                self.cfg.get("analysis.ohlcv_interval", "15m"),
-                self.cfg.get("analysis.ohlcv_lookback", 200),
-            )
-            analysis = self.signals.analyze(pair, candles)
-            plan = self.recommender.evaluate(
-                pair, analysis, equity, self.portfolio.cash, 0
-            )
-            out.append((pair, analysis, plan))
-        out.sort(key=lambda t: t[1].score, reverse=True)
-        return out
+        return self._analyze_many(candidates, equity, self.portfolio.cash, 0)
 
-    def _evaluate_candidate(self, pair: TokenPair) -> None:
-        # Analyse technique
-        candles = self.birdeye.get_ohlcv(
-            pair.base_address,
-            self.cfg.get("analysis.ohlcv_interval", "15m"),
-            self.cfg.get("analysis.ohlcv_lookback", 200),
-        )
-        analysis = self.signals.analyze(pair, candles)
-
-        # Recommandation : note + action + plan (calculé pour CHAQUE token)
-        equity = self.portfolio.equity(self._price_cache)
-        positions_value = self.portfolio.positions_value(self._price_cache)
-        plan = self.recommender.evaluate(
-            pair, analysis, equity, self.portfolio.cash, positions_value
-        )
-
+    def _log_grade(self, pair: TokenPair, plan, analysis) -> None:
         log.info("%-10s | MC %7.0fk | NOTE %-2s | score %5.1f | conf %4.1f | "
                  "%-10s | %s",
                  pair.base_symbol, (pair.market_cap or pair.fdv) / 1000,
                  plan.grade, plan.score, plan.confidence, plan.action,
                  ", ".join(analysis.reasons[:2]))
 
-        if not plan.is_actionable:
-            return
-
-        # Plan de scalping détaillé
+    def _execute_entry(self, pair: TokenPair, analysis, plan) -> None:
+        """Décision d'entrée séquentielle : risque -> sécurité -> achat."""
         self._log_plan(pair, plan)
-
         if plan.size_usd < 1:
             log.info("  ↳ taille de position trop faible — pas d'entrée")
             return
 
-        # Vérifs de risque avant d'engager des appels de sécurité coûteux
+        # Re-snapshot du risque (l'état a pu changer depuis l'analyse parallèle)
+        equity = self.portfolio.equity(self._price_cache)
+        positions_value = self.portfolio.positions_value(self._price_cache)
         can, why = self.risk.can_open(
             equity, self.portfolio.cash,
             len(self.portfolio.positions), positions_value,
@@ -161,7 +179,7 @@ class TradingEngine:
             log.info("  ↳ entrée bloquée (risk) : %s", why)
             return
 
-        # Filtre 2 : sécurité anti-rug / honeypot
+        # Filtre 2 : sécurité anti-rug / honeypot + impact prix réel (Jupiter)
         report = self.safety.check(pair)
         if not report.passed:
             log.info("  ↳ REJET sécurité : %s", "; ".join(report.reasons))
@@ -169,10 +187,16 @@ class TradingEngine:
         if report.reasons:
             log.info("  ↳ sécurité OK (notes : %s)", "; ".join(report.reasons))
 
+        # Impact prix réel pour un fill paper réaliste
+        impact = self.jupiter.get_price_impact(pair.base_address, plan.size_usd)
+        real_impact = impact["price_impact_pct"] if impact else None
+
         reason = (f"{plan.action} note={plan.grade} score={plan.score} "
                   f"R/R={plan.risk_reward}")
         self.portfolio.buy(pair.base_address, pair.base_symbol,
-                           pair.price_usd, plan.size_usd, reason, plan=plan)
+                           pair.price_usd, plan.size_usd, reason, plan=plan,
+                           liquidity_usd=pair.liquidity_usd,
+                           real_impact_pct=real_impact)
         self._price_cache[pair.base_address] = pair.price_usd
 
     def _log_plan(self, pair: TokenPair, plan) -> None:
@@ -193,7 +217,7 @@ class TradingEngine:
         if not self.portfolio.positions:
             return
         for addr, pos in list(self.portfolio.positions.items()):
-            price = self._fresh_price(addr, pos.symbol)
+            price, liquidity = self._fresh_quote(addr)
             if price <= 0:
                 continue
             self._price_cache[addr] = price
@@ -205,7 +229,8 @@ class TradingEngine:
 
             reason, fraction = self.risk.evaluate_exit(pos, price)
             if reason:
-                self.portfolio.sell(addr, price, fraction, reason)
+                self.portfolio.sell(addr, price, fraction, reason,
+                                    liquidity_usd=liquidity)
                 # Palier de TP partiel atteint : on le retire pour ne pas
                 # le redéclencher, et on persiste le reliquat.
                 if (fraction < 1.0 and addr in self.portfolio.positions
@@ -219,13 +244,13 @@ class TradingEngine:
         self.db.record_equity(eq, self.portfolio.cash, pv,
                               len(self.portfolio.positions))
 
-    def _fresh_price(self, token_address: str, symbol: str) -> float:
-        """Prix courant via DexScreener (paire la plus liquide du token)."""
+    def _fresh_quote(self, token_address: str) -> tuple[float, float]:
+        """(prix, liquidité) courants via DexScreener (pool le plus liquide)."""
         pairs = self.dex.get_token_pairs(token_address)
         if not pairs:
-            return self._price_cache.get(token_address, 0.0)
+            return self._price_cache.get(token_address, 0.0), 0.0
         best = max(pairs, key=lambda p: p.liquidity_usd)
-        return best.price_usd
+        return best.price_usd, best.liquidity_usd
 
     # ------------------------------------------------------------------
     #  Boucle principale

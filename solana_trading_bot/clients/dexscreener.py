@@ -8,6 +8,7 @@ On l'utilise pour :
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
 from ..logger import get_logger
@@ -138,11 +139,15 @@ class DexScreenerClient:
         """
         seen: dict[str, TokenPair] = {}
 
-        # 1) Tokens émergents -> paires détaillées
-        for addr in self._discover_addresses():
-            for pair in self.get_token_pairs(addr):
-                if pair.pair_address and pair.pair_address not in seen:
-                    seen[pair.pair_address] = pair
+        # 1) Tokens émergents -> paires détaillées (récupération parallèle)
+        addresses = self._discover_addresses()
+        if addresses:
+            workers = max(1, min(8, len(addresses)))
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                for pairs in pool.map(self.get_token_pairs, addresses):
+                    for pair in pairs:
+                        if pair.pair_address and pair.pair_address not in seen:
+                            seen[pair.pair_address] = pair
 
         # 2) Complément par recherche générique
         for q in (queries or ["SOL", "USDC"]):

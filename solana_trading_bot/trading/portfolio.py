@@ -12,6 +12,7 @@ import time
 from ..logger import get_logger
 from ..models import Position, Side, Trade
 from ..storage.database import Database
+from .execution import FillModel
 
 log = get_logger("portfolio")
 
@@ -23,6 +24,12 @@ class Portfolio:
         self.mode = config.mode
         self.slippage_pct = config.get("risk.slippage_pct", 1.0)
         self.fee_pct = config.get("risk.fee_pct", 0.3)
+        # Modèle de fill réaliste (slippage dépendant de la liquidité)
+        self.fill_model = FillModel(
+            base_slippage_pct=self.slippage_pct,
+            fee_pct=self.fee_pct,
+            impact_k=config.get("risk.impact_k", 0.6),
+        )
         starting = config.get("risk.starting_balance_usd", 1000)
 
         # Reprise d'état si la base existe déjà
@@ -71,8 +78,9 @@ class Portfolio:
 
     # ---------------- Exécution ----------------
     def buy(self, token_address: str, symbol: str, price: float,
-            usd_amount: float, reason: str = "",
-            plan=None) -> Position | None:
+            usd_amount: float, reason: str = "", plan=None,
+            liquidity_usd: float = 0.0,
+            real_impact_pct: float | None = None) -> Position | None:
         if usd_amount <= 0 or price <= 0 or usd_amount > self.cash:
             log.warning("Achat refusé (%s) : montant=%.2f cash=%.2f",
                         symbol, usd_amount, self.cash)
@@ -83,9 +91,10 @@ class Portfolio:
                 "Exécution LIVE non activée — voir JupiterClient.execute_swap"
             )
 
-        # Simulation paper : prix d'exécution dégradé + frais
-        fill_price = price * (1 + self.slippage_pct / 100)
-        fees = usd_amount * self.fee_pct / 100
+        # Simulation paper : fill réaliste (slippage selon liquidité/impact)
+        fill_price, fees = self.fill_model.buy_fill(
+            price, usd_amount, liquidity_usd, real_impact_pct
+        )
         invested = usd_amount - fees
         quantity = invested / fill_price
 
@@ -117,7 +126,7 @@ class Portfolio:
         return pos
 
     def sell(self, token_address: str, price: float, fraction: float,
-             reason: str = "") -> float:
+             reason: str = "", liquidity_usd: float = 0.0) -> float:
         """Vend `fraction` (0-1) de la position. Retourne le PnL réalisé."""
         pos = self.positions.get(token_address)
         if not pos or price <= 0:
@@ -132,9 +141,11 @@ class Portfolio:
             )
 
         qty_sold = pos.quantity * fraction
-        fill_price = price * (1 - self.slippage_pct / 100)
+        gross_mid = qty_sold * price
+        fill_price, fees = self.fill_model.sell_fill(
+            price, gross_mid, liquidity_usd
+        )
         gross = qty_sold * fill_price
-        fees = gross * self.fee_pct / 100
         proceeds = gross - fees
 
         # Coût proportionnel de la portion vendue

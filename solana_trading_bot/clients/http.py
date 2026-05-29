@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from typing import Any, Optional
+from threading import Lock
 
 import requests
 from tenacity import (
@@ -35,6 +36,7 @@ class HttpClient:
         self.timeout = timeout
         self.min_interval_sec = min_interval_sec
         self._last_call = 0.0
+        self._throttle_lock = Lock()
         self.session = requests.Session()
         if default_headers:
             self.session.headers.update(default_headers)
@@ -43,12 +45,14 @@ class HttpClient:
         )
 
     def _throttle(self) -> None:
+        """Espacement minimal entre requêtes, sûr en multi-thread."""
         if self.min_interval_sec <= 0:
             return
-        elapsed = time.time() - self._last_call
-        if elapsed < self.min_interval_sec:
-            time.sleep(self.min_interval_sec - elapsed)
-        self._last_call = time.time()
+        with self._throttle_lock:
+            elapsed = time.time() - self._last_call
+            if elapsed < self.min_interval_sec:
+                time.sleep(self.min_interval_sec - elapsed)
+            self._last_call = time.time()
 
     @retry(
         retry=retry_if_exception_type((requests.RequestException, RateLimitError)),

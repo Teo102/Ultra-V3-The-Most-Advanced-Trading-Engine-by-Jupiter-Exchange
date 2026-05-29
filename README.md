@@ -20,14 +20,16 @@ réaliste (slippage + frais simulés).
 solana_trading_bot/
 ├── config.py            # chargement config.yaml + .env (secrets)
 ├── logger.py            # logs console (rich) + fichier
-├── models.py            # dataclasses : TokenPair, Position, Trade, ...
-├── engine.py            # orchestrateur (pipeline complet par cycle)
-├── reporting.py         # statistiques de performance
-├── __main__.py          # CLI (run / once / scan / stats)
+├── models.py            # dataclasses : TokenPair, Position, Trade, TradePlan
+├── engine.py            # orchestrateur (analyse parallèle + trading)
+├── backtest.py          # backtester historique (PnL, winrate, DD, Sharpe)
+├── reporting.py         # stats de perf, tableau de notation, backtest
+├── __main__.py          # CLI (run / once / scan / rank / stats / backtest)
 ├── clients/
-│   ├── http.py          # HTTP avec retry + back-off (429)
-│   ├── dexscreener.py   # découverte de paires + données de marché
-│   ├── birdeye.py       # OHLCV + sécurité on-chain + holders
+│   ├── http.py          # HTTP avec retry + back-off (429), thread-safe
+│   ├── dexscreener.py   # découverte de paires + marché (récupération parallèle)
+│   ├── birdeye.py       # OHLCV + sécurité on-chain + holders (clé API)
+│   ├── geckoterminal.py # OHLCV public GRATUIT (repli de Birdeye)
 │   └── jupiter.py       # quotes/route (price impact, anti-honeypot)
 ├── strategies.py        # profils stratégie (scalping/swing) + risque
 ├── analysis/
@@ -38,6 +40,7 @@ solana_trading_bot/
 │   └── filters.py       # filtre univers (MC+liquidité) + anti-rug/honeypot
 ├── trading/
 │   ├── risk.py          # sizing, exposition, coupe-circuit, SL/TP/trailing
+│   ├── execution.py     # FillModel : slippage réaliste selon la liquidité
 │   └── portfolio.py     # cash, positions, exécution paper (PnL réaliste)
 └── storage/
     └── database.py      # persistance SQLite (trades, positions, équité)
@@ -49,8 +52,9 @@ solana_trading_bot/
    `token-profiles` / `token-boosts` + recherches génériques).
 2. **Filtre 1 (univers)** — market cap 500k–3M, liquidité, volume 24h, ratio
    volume/liquidité, nombre de transactions, âge de la paire.
-3. **Analyse technique** — OHLCV Birdeye → RSI, EMA (9/21/50), MACD, Bollinger,
-   ATR, volume → **score composite pondéré** sur 5 dimensions.
+3. **Analyse technique** — OHLCV (Birdeye si clé, sinon **GeckoTerminal gratuit**)
+   → RSI, EMA, MACD, Bollinger, ATR, volume → **score composite pondéré** sur
+   5 dimensions. L'analyse de tous les candidats tourne **en parallèle**.
 4. **Filtre 2 (sécurité)** — anti-honeypot (route de vente Jupiter), impact
    prix, mint/freeze authority révoquées, concentration des holders, nb holders.
 5. **Décision** — sizing selon le risque, vérifs d'exposition, **achat (paper)**.
@@ -87,13 +91,17 @@ python -m solana_trading_bot scan
 # Tableau de NOTATION des tokens (note A+→F + plan par token)
 python -m solana_trading_bot rank
 
+# BACKTEST de la stratégie sur l'historique
+python -m solana_trading_bot backtest                       # top tokens découverts
+python -m solana_trading_bot backtest --pool <pool_address> --interval 5m --limit 500
+
 # Rapport de performance
 python -m solana_trading_bot stats
 ```
 
-> Sans `BIRDEYE_API_KEY`, le bot fonctionne en **analyse dégradée** (momentum
-> DexScreener uniquement). Ajoutez une clé Birdeye pour activer les indicateurs
-> techniques complets et les contrôles de sécurité on-chain.
+> **L'analyse technique fonctionne sans aucune clé API** grâce à l'OHLCV
+> public de GeckoTerminal. Une clé `BIRDEYE_API_KEY` améliore la fraîcheur des
+> données et débloque les contrôles de sécurité on-chain (mint/freeze, holders).
 
 ---
 
@@ -186,6 +194,36 @@ le reliquat.
   exposition cumulée max, **coupe-circuit de perte journalière**.
 - **Sorties auto** : stop-loss dur, take-profit partiel, trailing stop armé
   après activation, sortie temporelle (`max_hold_hours`).
+
+---
+
+## 📈 Backtesting
+
+Avant de risquer quoi que ce soit, **validez la stratégie sur l'historique** :
+
+```bash
+python -m solana_trading_bot backtest --top 5 --interval 15m --limit 500
+```
+
+Le backtester rejoue la stratégie **bougie par bougie** : à chaque pas il
+recalcule les indicateurs, demande la note + le plan, et gère la position avec
+les **mèches intra-bougie** (high/low) pour déclencher stop et take-profit de
+façon réaliste. Les fills passent par le même `FillModel` que le paper trading.
+
+Métriques produites : **rendement total**, **winrate**, **drawdown max**,
+**profit factor**, **Sharpe**, nombre de trades, et comparaison au **buy & hold**
+sur la même période — pour savoir si la stratégie *bat le simple holding*.
+
+> ⚠️ Le backtest est mono-actif (pas de corrélation inter-tokens), suppose une
+> liquidité constante et ne simule pas un rug en cours de route. C'est un outil
+> de **validation directionnelle**, pas une promesse de performance.
+
+## 💸 Fills réalistes (paper)
+
+Le `FillModel` n'applique pas un slippage fixe : il croît avec le ratio
+`taille_du_trade / liquidité` (impact non-linéaire des small caps) et utilise
+l'**impact prix réel mesuré par Jupiter** quand il est disponible. Le PnL paper
+est donc beaucoup plus proche de la réalité d'exécution.
 
 ---
 

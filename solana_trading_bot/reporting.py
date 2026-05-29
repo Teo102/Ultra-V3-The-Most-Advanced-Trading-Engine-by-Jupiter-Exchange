@@ -79,6 +79,41 @@ def print_rankings(rows: list[tuple]) -> None:
                   f"R/R={plan.risk_reward}")
 
 
+def print_backtest(results: list) -> None:
+    """Affiche les résultats de backtest (liste de BacktestResult)."""
+    try:
+        from rich.console import Console
+        from rich.table import Table
+
+        table = Table(title="📈 Backtest de la stratégie",
+                      show_header=True, header_style="bold cyan")
+        for col in ("Token", "Bougies", "Trades", "Winrate", "Rendement",
+                    "Buy&Hold", "DrawdownMax", "ProfitFactor", "Sharpe"):
+            table.add_column(col, justify="right")
+        table.columns[0].justify = "left"
+
+        for r in results:
+            ret_style = "green" if r.total_return_pct >= 0 else "red"
+            vs_style = ("green" if r.total_return_pct >= r.buy_hold_pct
+                        else "yellow")
+            table.add_row(
+                r.symbol, str(r.n_candles), str(r.n_trades),
+                f"{r.win_rate_pct:.0f}%",
+                f"[{ret_style}]{r.total_return_pct:+.1f}%[/]",
+                f"[{vs_style}]{r.buy_hold_pct:+.1f}%[/]",
+                f"{r.max_drawdown_pct:.1f}%",
+                f"{r.profit_factor}", f"{r.sharpe}",
+            )
+        Console().print(table)
+    except Exception:
+        print("\n=== Backtest ===")
+        for r in results:
+            print(f"  {r.symbol:10s} trades={r.n_trades} "
+                  f"winrate={r.win_rate_pct}% rendement={r.total_return_pct}% "
+                  f"(B&H {r.buy_hold_pct}%) DD={r.max_drawdown_pct}% "
+                  f"PF={r.profit_factor} Sharpe={r.sharpe}")
+
+
 def print_report(db: Database) -> None:
     stats = compute_stats(db)
     try:
